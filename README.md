@@ -1,6 +1,12 @@
 # C64-Breakout-for-Atari
-Port of Sausage-Toes C64 Breakout clone to the Atari 8-bit (eclipse/wudsn/atasm)
-Original Code for C64 -- https://github.com/Sausage-Toes/C64_Breakout
-
-As of 2017-02-26  This is Work In Progress. 
-Stay tuned for source uploads.
+;;===============================================================================
+;; C64 Breakout clone
+;; 2016 - Darren Du Vall aka Sausage-Toes
+;; Original C64 source at: 
+;; Github: https://github.com/Sausage-Toes/C64_Breakout
+;;===============================================================================
+;; Atari-fied for eclipse/wudsn/atasm by Ken Jennings
+;; Atari source at:
+;; Github: https://github.com/kenjennings/C64-Breakout-for-Atari
+;; Google Drive: https://drive.google.com/drive/folders/0B2m-YU97EHFESGVkTXp3WUdKUGM
+;;===============================================================================
