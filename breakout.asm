@@ -110,6 +110,31 @@
 ;;   table once per video frame.  This is sufficient for providing a 
 ;;   few  beeps and boops.
 ;;
+;;===============================================================================
+;; UPDATES V 1.0A
+;;===============================================================================
+;; * Fixed a Stupid Ken-ism that had a trailing pixel behind the ball
+;;   due to not clearing the last byte when rippling the image up or
+;;   down.
+;;
+;; * Fixed another stupid Ken trick that caused levels to end before
+;;   all the bricks are gone.  (Brick counter updates were incorrect.)
+;;
+;; * Got the main control into a headlock and made it say Uncle.  There
+;;   is now correct progression from Title, to main game, and end of
+;;   game.  Pressing the button goes to the next screen.  
+;;
+;; * Automatic play is working.  If left alone for approx 30 seconds
+;;   the game will automatically progress to the next screen.   
+;;
+;; * Sound is intentionally suppressed during the automatic game play.
+;; 
+;; * After the first loop through of automatic play, the Atari 
+;;   Attract mode/color cycling is intentionally engaged.
+;;
+;; * Pressing a button during automatic play will return to the 
+;;   title screen (and turn off the Attract mode if it is on.) 
+;;   
 ;===============================================================================
 ; DIRECTIVES
 ;===============================================================================
@@ -261,7 +286,104 @@ NUM_BIN_TO_TEXT = 16
 ;; Then, this needs to subtract 11 (12-1) for the size of the paddle, == $93.
 PADDLE_MAX = (PLAYFIELD_RIGHT_EDGE_NORMAL-PLAYFIELD_LEFT_EDGE_NORMAL-11)
 
-SETUP
+;; ===========================================================================
+;; main control loop
+;; ===========================================================================
+
+PRG_START
+	jsr setup  ;; setup graphics
+	jsr setup_sprites;
+
+	;; ========== TITLE SCREEN ==========
+
+do_title_screen
+	jsr clear_sound  ;; zero residual mr roboto after effects
+	jsr display_title
+
+	jsr reset_delay_timer
+do_while_waiting_title
+	jsr check_event
+	;; 0 means nothing unusual happened.
+	;; 1 means auto_next timer happened.  (Mr roboto can be enabled).
+	;; 2 means button was released.  (Mr roboto can be disabled).
+	beq do_while_waiting_title ;; 0 is no event
+
+	cmp #2 ;; button pressed?
+	bne start_mr_roboto ;; no button.  try the timer to start Mr Roboto.
+	beq do_player_start ;; Yes?  then continue by  running player.
+
+start_mr_roboto	;; timer ended? so Mr Roboto wakes up for work
+	lda last_event
+	cmp #1  ;; by this point this should be true.
+	bne do_player_start ;; not the timer.  go go player.
+	inc mr_roboto  ;; timer expired, so enable mr_roboto
+	bne do_start_game
+	
+do_player_start ; make sure roboto is not playing.
+	lda #0;
+	sta mr_roboto
+
+	;; ========== GAME INITIALIZATION ==========
+
+do_start_game	
+	jsr start_game ;; initialize beginning of game.
+	
+	;; ========== GAME EVENT CHECK -- PLAY MR ROBOTO OR NOT ==========
+
+	jsr reset_delay_timer
+do_while_gameplay
+	jsr check_event
+	;; button and timer events matter if mr_roboto is playing
+	beq do_play_game ;;nothing special, continue game
+
+	lda mr_roboto ;; button or timer expired and check if
+	beq do_play_game ;; mr roboto not running, so it doesn't matter
+
+	lda last_event
+	cmp #2 ;; check for key press
+	beq skip_attract ;; We exit because of button.
+	bne end_loop_roboto_attract ;; Time expired. exit and turn on attract mode 
+
+	;; ========== GAME PLAY ==========
+
+do_play_game	
+	jsr game_cycle
+	lda game_over_flag
+	beq do_while_gameplay
+
+	;; ========== GAME OVER ==========
+
+	jsr game_over
+	
+	jsr reset_delay_timer
+do_while_waiting_game_over
+	jsr check_event
+	beq do_while_waiting_game_over
+	
+	cmp #2 ;; if a key was pressed we are returning 
+	beq skip_attract
+	bne check_mr_roboto_employment
+	
+	;; If Mr Roboto is not at work, skip turning on attract mode.
+check_mr_roboto_employment	
+	lda mr_roboto
+	beq skip_attract
+
+	;; if mr roboto is at work intentionally turn on the attract mode on...	
+end_loop_roboto_attract
+	lda #$fe  ;; force attract mode on
+	sta ATRACT
+
+skip_attract
+	jmp do_title_screen  ;; do while more electricity
+
+	rts ;; never reaches here.
+
+
+;; ===========================================================================
+;; basic  setup. Stop sound. Create screen.
+;; ===========================================================================
+setup
 ;; Make sure 6502 decimal mode is not set -- not  necessary, 
 ;; but it makes me feel better to know this is not on.
 	cld
@@ -281,8 +403,6 @@ SETUP
 	jsr WaitFrame ;; Wait for vertical blank updates from the shadow registers.
 
 	jsr AtariStartScreen ;; Startup custom display list, etc.
-	
-	jsr display_title
 
 	rts ;; Inserting RTS here. This is reorganized as a subroutine called by 
 	;; the initial entry point.
@@ -352,68 +472,41 @@ setup_sprites
 ;;	sta VIC_SPRITE1_COLOR ;sprite 1 color
 	sta PCOLOR1 ; COLPM1 Player 1 color.
 
-;; Since the ball is "animated" (i.e. it moves in X and Y directions)
-;; the Atari version combines initializing the X and Y of 
-;; the ball image into a function...
+	jsr reset_ball ;; handle initial ball placement
 
-;;	lda #180  ;set x coordinate
-	lda #90 ;; set x coord (Atari is different)
-;;	sta VIC_SPRITE1_X_POS ;sprite 1 x
-;;	lda #144  ;set y coordinate
-	ldy #128 ;; set y coord (Atari is different)
-;;	sta VIC_SPRITE1_Y_POS ;sprite 1 y
-;;	lda #$ed ;237
-;;	sta $7f9 ;sprite 1 pointer
-
-;; On Atari Y position and image are handled by copying  
-;; the image data into the Player bitmap.
-
-	jsr AtariSetBallImage ;; Do image setup at X/Y position for Atari
-
-	;; Why is there RTS here?  If setup was 
 	rts
 
 
-PRG_START
-	jsr SETUP
-	jsr setup_sprites;
+
 
 ;========================================
 ; MAIN GAME LOOP
 ;=========================================
-main
-	jsr WaitFrame
-        
-	jsr JoyButton
-	lda BUTTON_RELEASED
-	bne do_title 
-
+game_cycle
 	;; The paddle control/movement is only 
 	;; called once, because the Atari version 
 	;; is using a real paddle.  
 	;; It was called twice to allow the 
 	;; keyboard/joystick controls to move the 
 	;; paddle faster than the ball.
-	jsr move_paddle
+	lda mr_roboto ;; auto play on?
+	bne autobot;
+	jsr move_paddle ;; otherwise do player movement.
+	clc
+	bcc game_checks
 ;;	jsr move_paddle
 
 	;; Ah ha moment.  This is what was enabled
 	;; and cause the game to run in automatic 
 	;; mode.
-;;	jsr auto_paddle
-;;	jsr auto_paddle
-  
+autobot
+	jsr auto_paddle
+	jsr auto_paddle
+	
+game_checks  
 	jsr move_ball
 	jsr check_sprite_collision
 	jsr check_sprite_background_collision
-
-	jmp main
-do_title  
-	jsr display_title
-        
-	jsr start_game
-        
-	jmp main
 
 	rts
 
@@ -602,7 +695,7 @@ move_ball_left
 ?hit_left_wall
 	lda #1
 	sta dir_x
-	jsr sound_bounce
+	jsr sound_wall
 	rts
 
 
@@ -631,7 +724,7 @@ move_ball_right
 ?hit_right_wall
 	lda #0
 	sta dir_x
-	jsr sound_bounce
+	jsr sound_wall
 	rts
 
 
@@ -647,7 +740,7 @@ moveball_up
 hit_ceiling
 	lda #1
 	sta dir_y
-	jsr sound_bounce
+	jsr sound_wall
 	rts
 
 
@@ -668,13 +761,17 @@ hit_floor
 	;sta dir_y
 
 	;jsr sound_bounce
-	jsr sound_bing
+	jsr sound_bing ;; Buzzer for drop ball
 
 	;update ball count
 	dec ball_count
 	jsr display_ball_count
 	lda ball_count
-	beq game_over
+	bne continue_game
+
+	inc game_over_flag ;; tell game loop we're over.
+
+continue_game
 	jsr reset_ball
 
 	rts
@@ -691,10 +788,12 @@ game_over
 ;; players off screen...
 	jsr AtariMovePMOffScreen
 
-	lda #<GAME_OVER_TEXT  ;; Load pointer to text
-	sta ZEROPAGE_POINTER_1          
-	lda #>GAME_OVER_TEXT               
-	sta ZEROPAGE_POINTER_1 + 1                                 
+	loadPointer ZEROPAGE_POINTER_1, GAME_OVER_TEXT
+;;	lda #<GAME_OVER_TEXT  ;; Load pointer to text
+;;	sta ZEROPAGE_POINTER_1          
+;;	lda #>GAME_OVER_TEXT               
+;;	sta ZEROPAGE_POINTER_1 + 1                                 
+
 	lda #10                          
 	sta PARAM1                      
 	lda #13
@@ -704,15 +803,17 @@ game_over
 	jsr DisplayText
 	jsr display_start_message
 	
-game_over_loop
-	jsr WaitFrame
-	jsr JoyButton
-	lda BUTTON_RELEASED
-	bne start_game0
-	jmp game_over_loop
+;;game_over_loop
+;;	jsr WaitFrame
+;;	jsr JoyButton
+;;	lda BUTTON_RELEASED
+;;	bne start_game0
+;;	jmp game_over_loop
 	
-start_game0
-	jmp start_game
+;;start_game0
+;;	jmp start_game
+
+	rts
 
 
 .local        
@@ -734,7 +835,7 @@ check_sprite_collision
 	sta HITCLR ;; reset collision -- any write will do
 	lda #0
 	sta dir_y
-	jsr sound_bounce
+	jsr sound_paddle
 
 	rts
 
@@ -813,7 +914,9 @@ check_sprite_background_collision
 	stx brick_count
 	;check is last brick
 	cpx #0
-	beq reset_playfield
+	bne ?no_collision
+	jsr reset_playfield
+
 ?no_collision
 
         rts
@@ -862,12 +965,17 @@ save_brick_points
 ;========================
 reset_playfield
 	jsr draw_playfield
+	
 	lda #$28
 	sta brick_count
+	
 	jsr display_score
+	
 	jsr reset_ball
+	
 	lda #1
 	sta dir_y
+	
 	jsr move_ball_vert
 
 	rts
@@ -879,12 +987,16 @@ reset_playfield
 ;=========================
 reset_ball
 	jsr AtariClearBallImage ;; Erase ball image at last Y position
+;; Since the ball is "animated" (i.e. it moves in X and Y directions)
+;; the Atari version combines initializing the X and Y of 
+;; the ball image into a function...
 ;;	lda #180  ;set x coordinate
 	lda #90 ;; Set X coordinate
 ;;	sta VIC_SPRITE1_X_POS ;sprite 1 x
 ;;	lda #144  ;set y coordinate        
 	ldy #128  ;; set y coordinate
 ;;	sta VIC_SPRITE1_Y_POS ;sprite 1 y
+
 	jsr AtariSetBallImage ;; Draw ball image at A, Y positions.
 	lda #1 ;set ball moving downward
 	sta dir_y
@@ -919,6 +1031,7 @@ display_char_coord
 	ldy #22
 	lda ychar
 	jsr DisplayByte
+
 	rts
 
 
@@ -1020,52 +1133,41 @@ is_a_brick
 
 
 ;===========================================
-; START GAME
+; START GAME 
+;; reset everything about the game.
+;; clear sound
+;; draw game playfield
+;; start sprites
+;; reset brick count 
+;; zero score 
+;; set new ball count
 ;===========================================
 start_game
 ;;	lda #$20 ;space
 	lda #$00 ;; Atari blank space internal code
 ;;	ldy #COLOR_WHITE
 	jsr ClearScreen
+	
 	jsr clear_sound
 	jsr draw_playfield
 	jsr setup_sprites
 	jsr reset_ball
-        
+
+	lda #$28 
+	sta brick_count
+
 	lda #0
+	sta game_over_flag
+	
 	sta score
 	sta score+1
-	jsr display_score
-	;display the score label
-	lda #<SCORE_LABEL                
-	sta ZEROPAGE_POINTER_1          
-	lda #>SCORE_LABEL               
-	sta ZEROPAGE_POINTER_1 + 1                                 
-	lda #30                          
-	sta PARAM1                      
-	lda #24
-	sta PARAM2                      
-;;	lda #COLOR_WHITE  
-;;	sta PARAM3
-	jsr DisplayText
-
+	jsr DisplayScore
+	
 	lda #5
 	sta ball_count
-	jsr display_ball_count
-	;display the ball label
-	lda #<BALL_LABEL                
-	sta ZEROPAGE_POINTER_1          
-	lda #>BALL_LABEL               
-	sta ZEROPAGE_POINTER_1 + 1                                 
-	lda #0                          
-	sta PARAM1                      
-	lda #24
-	sta PARAM2                      
-;;	lda #COLOR_WHITE  
-;;	sta PARAM3
-	jsr DisplayText
+	jsr DisplayBall
 
-	jmp main ;; Jumping out is so not nice. #GOTSPAGHETTI
+	rts
 
 
 ;=====================
@@ -1146,6 +1248,25 @@ add_score
 ; DISPLAY SCORE
 ;=======================================
 
+DisplayScore
+;display the score label
+	lda #<SCORE_LABEL                
+	sta ZEROPAGE_POINTER_1          
+	lda #>SCORE_LABEL               
+	sta ZEROPAGE_POINTER_1 + 1                                 
+	lda #30                          
+	sta PARAM1                      
+	lda #24
+	sta PARAM2                      
+;;	lda #COLOR_WHITE  
+;;	sta PARAM3
+	jsr DisplayText
+	
+	jsr display_score
+
+	rts
+	
+	
 display_score
 	;hi byte
 	lda score+1
@@ -1190,6 +1311,7 @@ display_score
 	sta SCREEN_MEM+$3E7
 	rts
 
+
 display_ball_count
 	clc
 	lda ball_count
@@ -1197,6 +1319,25 @@ display_ball_count
 	adc #NUM_BIN_TO_TEXT ;; add offset for binary 0 to text 0
 ;;	sta 1989
 	sta SCREEN_MEM+$3C5
+
+	rts
+
+
+DisplayBall
+;display the ball label
+	lda #<BALL_LABEL                
+	sta ZEROPAGE_POINTER_1          
+	lda #>BALL_LABEL               
+	sta ZEROPAGE_POINTER_1 + 1                                 
+	lda #0                          
+	sta PARAM1                      
+	lda #24
+	sta PARAM2                      
+;;	lda #COLOR_WHITE  
+;;	sta PARAM3
+	jsr DisplayText
+	
+	jsr display_ball_count
 
 	rts
 
@@ -1338,14 +1479,9 @@ display_title
 	jsr DisplayText
 
 	jsr display_start_message
-title_loop
-	jsr WaitFrame
-	jsr JoyButton
-	lda BUTTON_RELEASED
-	bne start_game1
-	jmp title_loop
-start_game1
-	jmp start_game  ;; Again. Jumping out is so not nice. #GOTSPAGHETTI
+
+	rts
+
 
 display_start_message
 ;;	lda #<START_TEXT                
@@ -1353,7 +1489,7 @@ display_start_message
 ;;	lda #>START_TEXT               
 ;;	sta ZEROPAGE_POINTER_1 + 1                                  
 	loadPointer ZEROPAGE_POINTER_1, START_TEXT
-	lda #11                          
+	lda #10                         
 	sta PARAM1                      
 	lda #21
 	sta PARAM2                      
@@ -1374,6 +1510,7 @@ JoyButton
 	bne ?buttonTest
 	lda #0                                  
 	sta BUTTON_RELEASED
+	
 ?buttonTest
 ;;	lda #$10 ; test bit #4 in JOY_2 Register
 ;;	bit JOY_2
@@ -1382,15 +1519,21 @@ JoyButton
 	lda #1   ; if it's pressed - save the result
 	sta BUTTON_PRESSED ; and return - we want a single press
 	rts      ; so we need to wait for the release
+
 ?buttonNotPressed
 	lda BUTTON_PRESSED ; and check to see if it was pressed first
 	bne ?buttonAction  ; if it was we go and set BUTTON_ACTION
 	rts
+	
 ?buttonAction
 	lda #0
 	sta BUTTON_PRESSED
 	lda #1
 	sta BUTTON_RELEASED
+	
+	;;	button was pressed, so turn off Attract Mode
+	lda #$00
+	sta ATRACT
 
 	rts
 
@@ -1435,6 +1578,82 @@ ClearLoop
 	rts
 
 
+;;============================================================================
+;; Check for button press or auto_next timer.
+;;
+;; 0 means noting unusual happened.
+;;
+;; 1 means auto_next timer happened.  (mr roboto could be enabled)
+;;
+;; 2 means button was released.  (mr roboto can be disabled).
+;;
+;;============================================================================
+check_event
+	jsr WaitFrame
+	
+	lda auto_next
+	beq skip_auto_advance
+	jsr reset_delay_timer
+	
+	lda #1 ;; auto advance event
+	sta last_event
+	rts  
+
+skip_auto_advance
+	;; If button was pressed then human player is playing.
+	jsr JoyButton
+	lda BUTTON_RELEASED
+	beq no_input
+	
+	lda #2
+	sta last_event
+	rts
+
+no_input	
+	lda #0 ; No input or change occurred.
+	sta last_event
+	rts
+
+
+;=============================================================================
+; pause_1_sec
+;
+;; Wait for a second to give the player time to release the 
+;; button after switching screens.
+;=============================================================================
+pause_1_second
+
+	jsr reset_timer ;; and reinitialize the timer.
+wait_a_second
+	lda RTCLOK+2
+	cmp #60
+	bne wait_a_second
+
+	rts
+	
+	
+;=============================================================================
+; reset_delay_timer
+;
+;; Clear the 29 second wait timer.
+;=============================================================================
+reset_delay_timer
+	lda #0 ;; zero the event flag.
+	sta auto_next
+	jsr reset_timer ;; and reinitialize the timer.
+	rts
+	
+	
+;=============================================================================
+; reset_timer
+;=============================================================================
+reset_timer
+	lda #0	;; reset real-time clock
+	sta RTCLOK+2;
+	sta RTCLOK+1;
+	rts
+	
+	
 ;-------------------------------------------------------------------------------------------
 ; VBL WAIT
 ;-------------------------------------------------------------------------------------------
@@ -1464,15 +1683,30 @@ WaitTick60
 	cmp RTCLOK60			;; Loop until the clock changes
 	beq WaitTick60
 	
-	lda #$00  ;; While the game is running turn off the "attract"
-	sta ATRACT ;; mode color cycling for CRT anti-burn-in
 ;;?WaitStep2
 ;;	lda VIC_RASTER_LINE
 ;;	cmp #$F8
 ;;	bne ?WaitStep2
 
+	;; if the real-time clock has ticked off approx 29 seconds,  
+	;; then set flag to notify other code.
+	lda RTCLOK+1;
+	cmp #7	;; Has 29 sec timer passed?
+	bne skip_29secTick ;; No.  So don't flag the event.
+	inc auto_next	;; flag the 29 second wait
+	jsr reset_timer
+
+skip_29secTick
+
+	lda mr_roboto ;; in auto play mode?
+	bne exit_waitFrame ;; Yes. then exit to skip playing sound.
+
+	lda #$00  ;; When Mr Roboto is NOT running turn off the "attract"
+	sta ATRACT ;; mode color cycling for CRT anti-burn-in
+    
 	jsr AtariSoundService ;; Play sound in progress if any.
 
+exit_waitFrame
 	rts
 
 
@@ -1655,7 +1889,7 @@ NYBBLE_TO_HEX ;; Values in Atari format
 ;====================================
 ; SOUND EFFECTS
 
-sound_bing
+sound_bing  ;; bing/buzz on drop ball
 	;jsr clear_sound
 ;;	lda #5;#$00  ;; A 2ms, D 168ms
 ;;	sta SID_ATTACK_DELAY  ;$d405 SID_ATTACK_DELAY
@@ -1676,7 +1910,7 @@ sound_bing
         rts
 
 
-sound_bounce
+sound_bounce ;; hit a brick.
 	;jsr clear_sound
 ;;	lda #5 ;; A 2ms, D 168ms
 ;;	sta SID_ATTACK_DELAY ;$d405      ;voice 1 attack / decay
@@ -1694,6 +1928,20 @@ sound_bounce
 ;;	sta SID_WAVEFORM_GATEBIT ;$d404      ;voice 1 control register
 
 	lda #$0E ;; index to bounce sound in sound tables.
+	sta SOUND_INDEX
+
+	rts
+
+
+sound_wall
+	lda #$1b ;; index to bounce sound in sound tables.
+	sta SOUND_INDEX
+
+	rts
+	
+	
+sound_paddle
+	lda #$28 ;; index to bounce sound in sound tables.
 	sta SOUND_INDEX
 
 	rts
@@ -2038,7 +2286,7 @@ AtariPMRippleUp
 	bpl ?RippleUp ;; 6 to 0 is positive. end when $FF
 
 	lda #0
-	sta PLAYER_MISSILE_BASE+PMADR_1LINE_PLAYER1,y ;; clear the last source byte.
+	sta PLAYER_MISSILE_BASE+PMADR_1LINE_PLAYER1-1,y ;; clear the last source byte.
 	
 	dec BALL_PLAYER_Y ; One scan line higher
 
@@ -2078,7 +2326,7 @@ AtariPMRippleDown
 	bpl ?RippleDown ; 6 to 0 is positive. end when $FF
 
 	lda #0
-	sta PLAYER_MISSILE_BASE+PMADR_1LINE_PLAYER1+6,y ;; clear the last source byte.
+	sta PLAYER_MISSILE_BASE+PMADR_1LINE_PLAYER1+7,y ;; clear the last source byte.
 
 	inc BALL_PLAYER_Y ;; One scan line lower
 
@@ -2160,6 +2408,20 @@ score
 ;; bytes and not BCD packed. 
 ;; Altering this would be a mod for beta version.
 
+mr_roboto
+	.byte $01  ;; flag if the game play is in automatic mode.
+
+auto_next
+	.byte $00 ;; flag when timer counted (29 sec). Used on the
+			;; title and game over  and auto play screens. When auto_wait
+			;; ticks it triggers automatic transition to the 
+			;; next screen.
+
+last_event 
+	.byte $00 ;; Save the value of last event in case it is needed fror retesting.
+
+game_over_flag
+	.byte $00 ;; flag when game over occurs
 
 brick_row ;index for draw_brick_row
 	.byte $00
@@ -2291,7 +2553,7 @@ GAME_OVER_TEXT
 
 START_TEXT
 ;;       .byte 'press fire to play?'
-	.sbyte +$80,"press fire to play"
+	.sbyte +$80,"press FIRE to play"
 	.byte $FF
 
 ;; In the title screen the C64 is using big block characters
@@ -2381,20 +2643,27 @@ SOUND_INDEX
 SOUND_AUDC_TABLE ;; AUDC -- Waveform, and Volume
 ;; index 0 is 0 sound
 	.byte $00
-;; index 1 is bing.  A 2ms, D 168ms, S 0, R 168 ms
+;; index 1 is bing/buzz on drop ball.  A 2ms, D 168ms, S 0, R 168 ms
 	.byte $Ad,$AC,$AB,$AA,$A9,$A8,$A7,$A6,$A5,$A3,$A2,$A0,$00
 ;; index $0e/14 is bounce.  A 2ms, D 168ms, S 0, R 168 ms
 	.byte $Ad,$AC,$AB,$AA,$A9,$A8,$A7,$A6,$A5,$A3,$A2,$A0,$00
-
+;; index $1b/27 is bounce_wall.  A 2ms, D 168ms, S 0, R 168 ms
+	.byte $Ad,$AC,$AB,$AA,$A9,$A8,$A7,$A6,$A5,$A3,$A2,$A0,$00
+;; index $28/40 is bounce_paddle.  A 2ms, D 168ms, S 0, R 168 ms
+	.byte $Ad,$AC,$AB,$AA,$A9,$A8,$A7,$A6,$A5,$A3,$A2,$A0,$00
+		
 SOUND_AUDF_TABLE ;; AUDF -- Frequency -- a little quirky tone shaping
 ;; index 0 is 0 sound
 	.byte $00
-;; index 1 is bing.  A 2ms, D 168ms, S 0, R 168 ms
+;; index 1 is bing/buzz on drop ball.  A 2ms, D 168ms, S 0, R 168 ms
 	.byte $30,$38,$40,$48,$50,$58,$60,$68,$70,$80,$90,$a0,$00
 ;; index $0E/14 is bounce.  A 2ms, D 168ms, S 0, R 168 ms
 	.byte $10,$10,$10,$10,$10,$0f,$0f,$0f,$0e,$0e,$0e,$0d,$00
-
-
+;; index $1b/27 is bounce_wall.  A 2ms, D 168ms, S 0, R 168 ms
+	.byte $18,$18,$18,$18,$18,$17,$17,$17,$16,$16,$16,$15,$00
+;; index $28/40 is bounce_paddle.  A 2ms, D 168ms, S 0, R 168 ms
+	.byte $20,$20,$20,$20,$20,$1f,$1f,$1f,$1e,$1e,$1e,$1d,$00
+	
 ;---------------------------------------------------------------------------------------------------
 ; Screen Line Offset Tables
 ; Query a line with lda (POINTER TO TABLE),x (where x holds the line number)
