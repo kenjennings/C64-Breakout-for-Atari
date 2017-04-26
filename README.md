@@ -21,3 +21,7 @@
 ;; Google Drive: https://drive.google.com/drive/folders/0B2m-YU97EHFESGVkTXp3WUdKUGM
 
 ;;===============================================================================
+
+NOTE that there are TWO release versions here.  
+Version 1.0 works with some minor display issues.  
+Version 1.0a is the current version with display problems fixed and the addition of an automatic running attract/demo mode. 
