@@ -1,4 +1,4 @@
-# C64_Breakout
+# C64_Breakout_for_Atari
 
 [![BreakoutTitleScreen](https://github.com/kenjennings/C64-Breakout-for-Atari/blob/master/BreakoutTitleScreen.png)](#features)
 
