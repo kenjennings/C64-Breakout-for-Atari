@@ -2,6 +2,7 @@
 
 [![BreakoutTitleScreen](https://github.com/kenjennings/C64-Breakout-for-Atari/blob/master/BreakoutTitleScreen.png)](#features)
 
+Breakout clone originally written for the C64 ported to run on Atari with minimal changes.
 
 ;;===============================================================================
 
