@@ -1,6 +1,6 @@
 # C64_Breakout
 
-[![BreakoutTitleScreen](https://github.com/kenjennings/HelloWhirled/blob/master/BreakoutTitleScreen.png)](#features)
+[![BreakoutTitleScreen](https://github.com/kenjennings/C64-Breakout-for-Atari/blob/master/BreakoutTitleScreen.png)](#features)
 
 
 ;;===============================================================================
