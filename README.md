@@ -1,5 +1,7 @@
 # C64_Breakout_for_Atari
 
+Video of game and attract mode play on YouTube:  https://www.youtube.com/watch?v=7OfxLa1_2Jk
+
 [![BreakoutTitleScreen](https://github.com/kenjennings/C64-Breakout-for-Atari/blob/master/BreakoutTitleScreen.png)](#features)
 
 Breakout clone originally written for the C64 ported to run on Atari with minimal changes.
