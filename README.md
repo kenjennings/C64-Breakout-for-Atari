@@ -32,7 +32,7 @@ Version 1.0a is the current version with display problems fixed and the addition
 
 ---
 
-This is primarily a demonstration in porting code between platforms.  As a Breakout clone it's a pretty lame version of Breakout.  It exhibits many of the worst behaviors of bad Breakout clones:
+This is primarily a demonstration in porting code between platforms.  As a Breakout clone it's pretty lame exhibiting many of the worst behaviors of bad Breakout clones:
 - Gigantic ball 
 - Four rows of bricks instead of 8 rows. 
 - No speed progression. 
