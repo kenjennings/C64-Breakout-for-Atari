@@ -4,7 +4,7 @@ Video of game and attract mode play on YouTube:  https://www.youtube.com/watch?v
 
 [![BreakoutTitleScreen](https://github.com/kenjennings/C64-Breakout-for-Atari/blob/master/BreakoutTitleScreen.png)](#features)
 
-Breakout clone originally written for the C64 ported to run on Atari with minimal changes.
+Breakout clone originally written for the C64. Source code ported to run on Atari with MINIMAL changes.
 
 ---
 
@@ -32,7 +32,7 @@ Version 1.0a is the current version with display problems fixed and the addition
 
 ---
 
-This is primarily a demonstration in porting code between platforms.  As a Breakout clone it's pretty lame exhibiting many of the worst behaviors of bad Breakout clones:
+This is primarily a demonstration in porting code between platforms.  As a Breakout clone it's pretty flawed exhibiting several questionable behaviors:
 - Gigantic ball 
 - Four rows of bricks instead of 8 rows. 
 - No speed progression. 
